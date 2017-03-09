@@ -1,14 +1,11 @@
 package com.jpmorgan.cakeshop.service.impl;
 
-import static com.jpmorgan.cakeshop.util.ProcessUtils.*;
-import static org.springframework.http.HttpMethod.*;
-import static org.springframework.http.MediaType.*;
-
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.jpmorgan.cakeshop.bean.GethConfigBean;
+import com.jpmorgan.cakeshop.config.AppConfig;
 import com.jpmorgan.cakeshop.dao.BlockDAO;
 import com.jpmorgan.cakeshop.dao.TransactionDAO;
 import com.jpmorgan.cakeshop.dao.WalletDAO;
@@ -24,17 +21,6 @@ import com.jpmorgan.cakeshop.service.task.LoadPeersTask;
 import com.jpmorgan.cakeshop.util.FileUtils;
 import com.jpmorgan.cakeshop.util.ProcessUtils;
 import com.jpmorgan.cakeshop.util.StreamLogAdapter;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-
-import javax.annotation.PreDestroy;
-
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
@@ -51,8 +37,21 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
+import static com.jpmorgan.cakeshop.util.ProcessUtils.*;
+import static org.springframework.http.HttpMethod.POST;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+
 /**
- *
  * @author Michael Kazansky
  */
 @Service
@@ -67,13 +66,13 @@ public class GethHttpServiceImpl implements GethHttpService {
     @Autowired
     private GethConfigBean gethConfig;
 
-    @Autowired(required=false)
+    @Autowired(required = false)
     private BlockDAO blockDAO;
 
-    @Autowired(required=false)
+    @Autowired(required = false)
     private TransactionDAO txDAO;
 
-    @Autowired(required=false)
+    @Autowired(required = false)
     private WalletDAO walletDAO;
 
     @Autowired
@@ -105,6 +104,14 @@ public class GethHttpServiceImpl implements GethHttpService {
 
         this.jsonContentHeaders = new HttpHeaders();
         this.jsonContentHeaders.setContentType(APPLICATION_JSON);
+    }
+
+    @PostConstruct
+    public void init(){
+        LOG.debug("Post costruct...");
+        if (System.getProperty("spring.profiles.active").equals("remote") && !Boolean.valueOf(System.getProperty("geth.init.example"))){
+            this.unlockAccounts();
+        }
     }
 
     private String executeGethCallInternal(String json) throws APIException {
@@ -226,7 +233,7 @@ public class GethHttpServiceImpl implements GethHttpService {
             }
 
             if (stderrLogger != null) {
-                stdoutLogger.stopAsync();
+                stderrLogger.stopAsync();
             }
 
             return killProcess(readPidFromFile(gethConfig.getGethPidFilename()), "geth.exe");
@@ -422,9 +429,10 @@ public class GethHttpServiceImpl implements GethHttpService {
         // Figure out how many accounts need unlocking
         String accountsToUnlock = "";
         int numAccounts = walletDAO.list().size();
+        LOG.debug("Accounts to unlock is {}\n", numAccounts);
         if (numAccounts == 0) {
-            accountsToUnlock = "0,1,2"; // default to accounts we ship
-
+            //accountsToUnlock = "0,1,2";
+            accountsToUnlock = this.countFileInKeystoreFolder();
         } else {
             for (int i = 0; i < numAccounts; i++) {
                 if (accountsToUnlock.length() > 0) {
@@ -434,16 +442,22 @@ public class GethHttpServiceImpl implements GethHttpService {
             }
         }
 
+        LOG.debug("Password file is {}\n", gethConfig.getGethPasswordFile());
+
         List<String> commands = Lists.newArrayList(gethConfig.getGethPath(),
                 "--port", gethConfig.getGethNodePort(),
                 "--datadir", gethConfig.getDataDirPath(),
                 "--solc", gethConfig.getSolcPath(),
                 "--nat", "none", "--nodiscover",
-                "--unlock", accountsToUnlock, "--password", gethConfig.getGethPasswordFile(),
+//                "--unlock", accountsToUnlock, "--password", gethConfig.getGethPasswordFile(),
                 "--rpc", "--rpcaddr", "127.0.0.1", "--rpcport", gethConfig.getRpcPort(),
                 "--rpcapi", gethConfig.getRpcApiList(),
                 "--ipcdisable"
         );
+
+        if (!accountsToUnlock.equals("")){
+            commands.addAll(Lists.newArrayList("--unlock", accountsToUnlock, "--password", gethConfig.getGethPasswordFile()));
+        }
 
         if (null != additionalParams && additionalParams.length > 0) {
             commands.addAll(Lists.newArrayList(additionalParams));
@@ -478,6 +492,27 @@ public class GethHttpServiceImpl implements GethHttpService {
         return commands;
     }
 
+    private String countFileInKeystoreFolder() {
+
+        File keystoreDir = new File(FileUtils.expandPath(this.gethConfig.getDataDirPath(), "keystore"));
+
+        int keystoreAccounts = keystoreDir.listFiles().length;
+
+        if (keystoreAccounts <= 0){
+            return "";
+        }
+
+        if (keystoreAccounts == 1){
+            return "0";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < keystoreAccounts; i++){
+            sb.append(i).append(",");
+        }
+        return sb.toString();
+    }
+
     private boolean checkWalletUnlocked() {
         WalletService wallet = applicationContext.getBean(WalletService.class);
         List<Account> accounts = null;
@@ -499,6 +534,7 @@ public class GethHttpServiceImpl implements GethHttpService {
         for (Account account : accounts) {
             while (true) {
                 try {
+                    LOG.debug("Current address is {}", account.toString());
                     if (wallet.isUnlocked(account.getAddress())) {
                         LOG.debug("Account " + account.getAddress() + " unlocked");
                         unlocked++;
@@ -549,6 +585,25 @@ public class GethHttpServiceImpl implements GethHttpService {
         }
 
         return false;
+    }
+
+    private void unlockAccounts() {
+
+        try {
+            LOG.info("Unlocking accounts");
+            Map<String,String> accounts = AppConfig.getAccountsConfigurationRemote();
+
+           for (Map.Entry<String, String> entry : accounts.entrySet()){
+                Map<String, Object> result = this.executeGethCall("personal_unlockAccount",entry.getKey(),entry.getValue(),0);
+                if (result.get("_result") != null){
+                    Account account = new Account();
+                    account.setAddress(entry.getKey());
+                    walletDAO.save(account);
+                }
+           }
+        } catch (IOException e) {
+            LOG.info("Cannot unlock accounts because of IOException {}",e.getMessage());
+        }
     }
 
     private Boolean checkConnection() {

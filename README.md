@@ -95,7 +95,7 @@ java -jar cakeshop.war example
 java -jar cakeshop.war
 ```
 
-At this point you should have Cakeshop running and connected to node 1 in the Quorum cluster (dd1 on RPC port 22000).
+At this point you should have Cakeshop running and connected to node 1 in the quorum cluster (dd1 on rpc port 22000).
 
 You can change the node you're connected to by running the last two commands again from another directory and modifying the properties file at `data/local/application.properties` to point to a different RPC port in the range `22000-22006` before starting Cakeshop.
 

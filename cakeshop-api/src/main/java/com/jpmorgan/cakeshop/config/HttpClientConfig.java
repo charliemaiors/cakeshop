@@ -25,7 +25,7 @@ public class HttpClientConfig {
         return new OkHttpClient.Builder()
                 .readTimeout(120, TimeUnit.SECONDS)
                 .writeTimeout(120, TimeUnit.SECONDS)
-                .connectTimeout(1, TimeUnit.SECONDS)
+                .connectTimeout(30, TimeUnit.SECONDS) //For a remote connection 1 second could not be sufficient
                 .connectionPool(new ConnectionPool(maxIdleSize, 1, TimeUnit.MINUTES))
                 .build();
     }

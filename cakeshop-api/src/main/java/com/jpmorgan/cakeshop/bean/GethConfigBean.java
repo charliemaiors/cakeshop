@@ -1,22 +1,8 @@
 package com.jpmorgan.cakeshop.bean;
 
-import static com.jpmorgan.cakeshop.util.FileUtils.*;
-import static com.jpmorgan.cakeshop.util.ProcessUtils.*;
-import static org.apache.commons.io.FileUtils.*;
-
 import com.jpmorgan.cakeshop.util.FileUtils;
 import com.jpmorgan.cakeshop.util.SortedProperties;
 import com.jpmorgan.cakeshop.util.StringUtils;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.net.URI;
-import java.util.Properties;
-
-import javax.annotation.PostConstruct;
-
 import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +10,18 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
+
+import javax.annotation.PostConstruct;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.URI;
+import java.util.Properties;
+
+import static com.jpmorgan.cakeshop.util.FileUtils.copyFile;
+import static com.jpmorgan.cakeshop.util.FileUtils.expandPath;
+import static com.jpmorgan.cakeshop.util.ProcessUtils.ensureFileIsExecutable;
 
 @Component
 public class GethConfigBean {

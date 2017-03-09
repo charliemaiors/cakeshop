@@ -1,16 +1,11 @@
 package com.jpmorgan.cakeshop.config;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jpmorgan.cakeshop.util.FileUtils;
 import com.jpmorgan.cakeshop.util.SortedProperties;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.Properties;
-import java.util.concurrent.Executor;
-
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.LoggerFactory;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
 import org.springframework.aop.interceptor.SimpleAsyncUncaughtExceptionHandler;
@@ -23,6 +18,17 @@ import org.springframework.scheduling.annotation.AsyncConfigurer;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Map;
+import java.util.Properties;
+import java.util.concurrent.Executor;
+
 @Configuration
 @EnableAsync
 public class AppConfig implements AsyncConfigurer {
@@ -30,6 +36,7 @@ public class AppConfig implements AsyncConfigurer {
     private static final org.slf4j.Logger LOG = LoggerFactory.getLogger(AppConfig.class);
 
     public static final String CONFIG_FILE = "application.properties";
+    public static final String ACCOUNT_FILE = "accounts.json";
 
     /**
      * Return the configured environment name (via spring.profiles.active system prop)
@@ -37,12 +44,12 @@ public class AppConfig implements AsyncConfigurer {
      * @return String Environment name
      */
     public static String getEnv() {
-      return System.getProperty("spring.profiles.active");
+        return System.getProperty("spring.profiles.active");
     }
 
     /**
      * Return the configured config location
-     *
+     * <p>
      * Search order:
      * - ETH_CONFIG environment variable
      * - eth.config.dir system property (-Deth.config.dir param)
@@ -82,6 +89,10 @@ public class AppConfig implements AsyncConfigurer {
         return createPropConfigurer(getConfigPath());
     }
 
+    public static Map<String, String> getAccountsConfigurationRemote() throws IOException {
+        return getAccountUnlockConfiguration(getConfigPath());
+    }
+
     public static String getVendorConfigFile() {
         return "config".concat(File.separator).concat("application.properties");
     }
@@ -104,7 +115,7 @@ public class AppConfig implements AsyncConfigurer {
     }
 
     public static PropertySourcesPlaceholderConfigurer createPropConfigurer(String configDir)
-        throws IOException {
+            throws IOException {
 
         if (StringUtils.isBlank(getEnv())) {
             throw new IOException("System property 'spring.profiles.active' not set; unable to load config");
@@ -120,7 +131,7 @@ public class AppConfig implements AsyncConfigurer {
 
             configPath.mkdirs();
             if (!configPath.exists()) {
-               throw new IOException("Unable to create config dir: " + configPath.getAbsolutePath());
+                throw new IOException("Unable to create config dir: " + configPath.getAbsolutePath());
             }
 
             initVendorConfig(configFile);
@@ -143,10 +154,22 @@ public class AppConfig implements AsyncConfigurer {
 
         LOG.info("Loading config from " + configFile.toString());
 
+        if (System.getProperty("spring.profiles.active").equals("remote")) {
+            Path src = Paths.get(FileUtils.expandPath(SystemUtils.USER_DIR, "data", "geth", "remote", "accounts.json"));
+            Path dest = Paths.get(AppConfig.getConfigPath());
+            try {
+                FileUtils.copyFileToDirectory(src.toFile(), dest.toFile());
+            } catch (IOException e) {
+                System.out.println(new StringBuilder("Exception on copy ").append(e.getMessage()).toString());
+            }
+            String content = new String(Files.readAllBytes(Paths.get(AppConfig.getConfigPath(), "accounts.json")));
+            LOG.debug("File content is {}", content);
+        }
+
         return propConfig;
     }
 
-    @Bean(name="asyncExecutor")
+    @Bean(name = "asyncExecutor")
     @Override
     public Executor getAsyncExecutor() {
         ThreadPoolTaskExecutor exec = new ThreadPoolTaskExecutor();
@@ -168,6 +191,15 @@ public class AppConfig implements AsyncConfigurer {
     @Override
     public AsyncUncaughtExceptionHandler getAsyncUncaughtExceptionHandler() {
         return new SimpleAsyncUncaughtExceptionHandler();
+    }
+
+    private static Map<String, String> getAccountUnlockConfiguration(String configDir) throws IOException {
+        File configPath = new File(configDir);
+        File configFile = new File(configPath.getPath() + File.separator + ACCOUNT_FILE);
+
+        ObjectMapper mapper = new ObjectMapper();
+        return mapper.readValue(configFile, new TypeReference<Map<String, String>>() {
+        });
     }
 
 

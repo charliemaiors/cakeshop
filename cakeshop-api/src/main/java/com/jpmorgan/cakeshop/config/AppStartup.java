@@ -5,24 +5,7 @@ import com.jpmorgan.cakeshop.bean.GethConfigBean;
 import com.jpmorgan.cakeshop.error.APIException;
 import com.jpmorgan.cakeshop.error.ErrorLog;
 import com.jpmorgan.cakeshop.service.GethHttpService;
-import com.jpmorgan.cakeshop.util.EEUtils;
-import com.jpmorgan.cakeshop.util.FileUtils;
-import com.jpmorgan.cakeshop.util.ProcessUtils;
-import com.jpmorgan.cakeshop.util.StreamGobbler;
-import com.jpmorgan.cakeshop.util.StringUtils;
-
-import java.io.File;
-import java.io.FilenameFilter;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import javax.servlet.ServletContext;
-
+import com.jpmorgan.cakeshop.util.*;
 import org.apache.commons.lang3.SystemUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,8 +16,19 @@ import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 
+import javax.servlet.ServletContext;
+import java.io.File;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 @Order(999999)
-@Service(value="appStartup")
+@Service(value = "appStartup")
 public class AppStartup implements ApplicationListener<ApplicationEvent> {
 
     private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(AppStartup.class);
@@ -66,15 +60,15 @@ public class AppStartup implements ApplicationListener<ApplicationEvent> {
     public void onApplicationEvent(ApplicationEvent event) {
 
         if (event instanceof EmbeddedServletContainerInitializedEvent) {
-          // this event fires after context refresh and after geth has started
-          int port = ((EmbeddedServletContainerInitializedEvent) event).getEmbeddedServletContainer().getPort();
-          System.out.println("          url:         " + getSpringUrl(port));
-          System.out.println();
-          return;
+            // this event fires after context refresh and after geth has started
+            int port = ((EmbeddedServletContainerInitializedEvent) event).getEmbeddedServletContainer().getPort();
+            System.out.println("          url:         " + getSpringUrl(port));
+            System.out.println();
+            return;
         }
 
         if (!(event instanceof ContextRefreshedEvent)) {
-          return;
+            return;
         }
 
         if (autoStartFired) {
@@ -95,12 +89,14 @@ public class AppStartup implements ApplicationListener<ApplicationEvent> {
                 // Exit after all system initialization has completed
                 gethConfig.setAutoStart(false);
                 gethConfig.setAutoStop(false);
-                gethConfig.setRpcUrl("http://localhost:22000");
+                if (!System.getProperty("spring.profiles.active").equals("remote")) {
+                    gethConfig.setRpcUrl("http://localhost:22000");
+                }
                 try {
-                  gethConfig.save();
+                    gethConfig.save();
                 } catch (IOException e) {
-                  LOG.error("Error writing application.properties: " + e.getMessage());
-                  System.exit(1);
+                    LOG.error("Error writing application.properties: " + e.getMessage());
+                    System.exit(1);
                 }
                 System.out.println("initialization complete. wrote quorum-example config. exiting.");
                 System.exit(0);
@@ -108,7 +104,7 @@ public class AppStartup implements ApplicationListener<ApplicationEvent> {
 
             if (gethConfig.isAutoStart()) {
                 LOG.info("Autostarting geth node");
-                healthy =  geth.start();
+                healthy = geth.start();
                 if (!healthy) {
                     addError("GETH FAILED TO START");
                 }
@@ -177,13 +173,13 @@ public class AppStartup implements ApplicationListener<ApplicationEvent> {
 
     // Try to determine listening URL
     private String getSpringUrl(int port) {
-      String uri = "http://";
-      try {
-        uri = uri + EEUtils.getAllIPs().get(0).getAddr();
-      } catch (APIException e) {
-        uri = uri + "localhost";
-      }
-      return uri + ":" + Integer.toString(port) + "/cakeshop/";
+        String uri = "http://";
+        try {
+            uri = uri + EEUtils.getAllIPs().get(0).getAddr();
+        } catch (APIException e) {
+            uri = uri + "localhost";
+        }
+        return uri + ":" + Integer.toString(port) + "/cakeshop/";
     }
 
     public String getDebugInfo(ServletContext servletContext) {
@@ -197,7 +193,7 @@ public class AppStartup implements ApplicationListener<ApplicationEvent> {
 
         out.append("servlet.container: ");
         if (servletContext != null) {
-           out.append(servletContext.getServerInfo());
+            out.append(servletContext.getServerInfo());
         }
         out.append("\n\n");
 
@@ -225,6 +221,9 @@ public class AppStartup implements ApplicationListener<ApplicationEvent> {
         out.append("geth.path: " + gethConfig.getGethPath() + "\n");
         out.append("geth.data.dir: " + gethConfig.getDataDirPath() + "\n");
         out.append("geth.version: ");
+        out.append("geth.password: " + gethConfig.getGethPasswordFile());
+
+
         if (StringUtils.isNotBlank(gethVer)) {
             out.append(gethVer);
         } else {
