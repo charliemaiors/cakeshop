@@ -67,7 +67,7 @@ public class WalletServiceImpl implements WalletService, GethRpcConstants {
 
     @Override
     public Account create() throws APIException {
-        Map<String, Object> result = gethService.executeGethCall("personal_newAccount", new Object[]{""});
+        Map<String, Object> result = gethService.executeGethCall("personal_newAccount", new Object[]{"ciao"});
         String newAddress = (String) result.get("_result");
 
         Account account = new Account();
