@@ -39,7 +39,7 @@ public class EventServiceTest extends BaseGethRpcTest {
 
             List<Event> events = eventService.listForBlock(tx.getBlockNumber().longValue());
             assertNotNull(events);
-            assertTrue(events.isEmpty());
+            assertFalse(events.isEmpty());
             assertEquals(events.size(), 1);
 
             testEvent(events.get(0));
